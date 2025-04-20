@@ -332,3 +332,48 @@ class TidalCollector:
                     f"[yellow]Failed to add tracks to playlist: {str(e)}[/yellow]"
                 )
             return False
+
+    def remove_all_favorite_tracks(self) -> bool:
+        """Remove all tracks from the user's favorites.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get all favorite tracks
+            favorites = self.user.favorites
+            tracks = favorites.tracks()
+
+            if not tracks:
+                if not self.silent:
+                    console.print("[yellow]No favorite tracks found to remove[/yellow]")
+                return True  # Already empty, so technically successful
+
+            if not self.silent:
+                console.print(f"Removing {len(tracks)} tracks from favorites...")
+
+            # Remove each track from favorites
+            success_count = 0
+            for track in tracks:
+                try:
+                    favorites.remove_track(track.id)
+                    success_count += 1
+                    if not self.silent:
+                        console.print(f"Removed track: {track.name}")
+                except Exception as e:
+                    if not self.silent:
+                        console.print(
+                            f"[yellow]Failed to remove track {track.id}: {str(e)}[/yellow]"
+                        )
+
+            if not self.silent:
+                console.print(
+                    f"[bold green]Successfully removed {success_count} out of {len(tracks)} tracks from favorites[/bold green]"
+                )
+
+            return success_count == len(tracks)
+
+        except Exception as e:
+            if not self.silent:
+                console.print(f"[red]Failed to remove favorite tracks: {str(e)}[/red]")
+            return False

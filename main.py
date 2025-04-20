@@ -5,7 +5,11 @@ import sys
 
 import click
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.progress import Progress
+from rich.prompt import (
+    Confirm,  # Add this import
+    Prompt,
+)
 
 from tidal_extractor import TidalExtractor
 
@@ -336,6 +340,69 @@ def print_all():
     for i, track in enumerate(tracks, 1):
         artists = ", ".join(track["artists"])
         console.print(f"{i}. {track['title']} - {artists}")
+
+
+@cli.command()
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+def empty_favorites(force):
+    """Remove all tracks from your favorites collection.
+
+    This is a destructive operation that cannot be undone.
+    """
+    extractor = TidalExtractor()
+
+    if not extractor.connect():
+        sys.exit(1)
+
+    # Get current count of favorite tracks
+    tracks = extractor.get_favorite_tracks()
+    count = len(tracks)
+
+    if count == 0:
+        console.print("[yellow]Your favorites collection is already empty.[/yellow]")
+        return
+
+    # Display warning
+    console.print("\n[bold red]⚠️  WARNING: DESTRUCTIVE OPERATION  ⚠️[/bold red]")
+    console.print(
+        f"You are about to remove all {count} tracks from your favorites collection."
+    )
+    console.print("[bold red]This action cannot be undone![/bold red]\n")
+
+    if not force:
+        confirm = Confirm.ask(
+            "[bold yellow]Are you absolutely sure you want to remove all your favorites?[/bold yellow]"
+        )
+        if not confirm:
+            console.print("Operation cancelled.")
+            return
+    else:
+        # Even with force, show a warning
+        console.print(
+            "[bold yellow]Using --force flag to bypass confirmation check.[/bold yellow]"
+        )
+        console.print("Proceeding with emptying favorites...")
+
+    # Show progress indication
+    with Progress() as progress:
+        task = progress.add_task("[red]Emptying favorites...", total=None)
+
+        # Perform the operation
+        success = extractor.empty_favorites()
+
+        progress.update(task, completed=True)
+
+    if success:
+        console.print(
+            f"[bold green]Successfully removed all {count} tracks from your favorites collection.[/bold green]"
+        )
+    else:
+        console.print(
+            "[bold red]Failed to completely empty your favorites collection.[/bold red]"
+        )
+        console.print(
+            "Some tracks may have been removed. Check your collection for details."
+        )
 
 
 if __name__ == "__main__":

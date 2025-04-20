@@ -92,3 +92,15 @@ class TidalExtractor:
             format_type: Format type ('simple', 'detailed')
         """
         TrackFormatter.save_tracks_to_file(tracks, filename, format_type)
+
+    def empty_favorites(self) -> bool:
+        """Remove all tracks from the user's favorites.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.collector:
+            if not self.connect():
+                return False
+
+        return self.collector.remove_all_favorite_tracks()
