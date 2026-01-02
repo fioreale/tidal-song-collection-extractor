@@ -101,7 +101,8 @@ class TidalCollector:
             List of track dictionaries
         """
         if self.silent:
-            tracks = self.session.get_playlist_tracks(playlist_id)
+            playlist = self.session.playlist(playlist_id)
+            tracks = playlist.tracks()
 
             result = []
             for track in tracks:
@@ -121,7 +122,8 @@ class TidalCollector:
             return result
         else:
             with Progress() as progress:
-                tracks = self.session.get_playlist_tracks(playlist_id)
+                playlist = self.session.playlist(playlist_id)
+                tracks = playlist.tracks()
 
                 task = progress.add_task(
                     "[cyan]Fetching playlist tracks...", total=len(tracks)
