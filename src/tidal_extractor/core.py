@@ -1,6 +1,6 @@
 """Core functionality for Tidal Extractor."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .auth import authenticate
 from .collector import TidalCollector
@@ -82,16 +82,19 @@ class TidalExtractor:
             TrackFormatter.print_tracks_table(tracks, title)
 
     def save_tracks(
-        self, tracks: List[Dict[str, Any]], filename: str, format_type: str = "simple"
+        self,
+        tracks: List[Dict[str, Any]],
+        filename: str,
+        csv_fields: Optional[List[str]] = None,
     ) -> None:
-        """Save tracks to a file.
+        """Save tracks to a CSV file.
 
         Args:
             tracks: List of track dictionaries
             filename: Output filename
-            format_type: Format type ('simple', 'detailed')
+            csv_fields: List of fields to include in CSV (default: all fields)
         """
-        TrackFormatter.save_tracks_to_file(tracks, filename, format_type)
+        TrackFormatter.save_tracks_to_file(tracks, filename, csv_fields)
 
     def empty_favorites(self) -> bool:
         """Remove all tracks from the user's favorites.

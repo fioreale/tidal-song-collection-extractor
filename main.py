@@ -24,30 +24,44 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--output", "-o", help="Output file (if not specified, prints to console)"
+    "--output", "-o", help="Output CSV file (if not specified, prints to console)"
 )
 @click.option(
-    "--format",
+    "--csv-fields",
     "-f",
-    type=click.Choice(["simple", "detailed", "ids"]),
-    default="simple",
-    help="Output format when saving to file",
+    help="Comma-separated list of fields to include in CSV (default: id,title,artists,album,duration)",
 )
-def favorites(output, format):
+@click.option(
+    "--from-csv",
+    help="Load and display tracks from a CSV file instead of fetching from Tidal",
+)
+def favorites(output, csv_fields, from_csv):
     """Extract and print your favorite tracks."""
     extractor = TidalExtractor()
 
-    if not extractor.connect():
-        sys.exit(1)
+    if from_csv:
+        # Load tracks from CSV file
+        from tidal_extractor.formatter import TrackFormatter
 
-    tracks = extractor.get_favorite_tracks()
+        try:
+            tracks = TrackFormatter.load_tracks_from_csv(from_csv)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[bold red]Error: {str(e)}[/bold red]")
+            sys.exit(1)
+    else:
+        # Fetch tracks from Tidal
+        if not extractor.connect():
+            sys.exit(1)
+
+        tracks = extractor.get_favorite_tracks()
 
     if not tracks:
         console.print("[yellow]No favorite tracks found.[/yellow]")
         return
 
     if output:
-        extractor.save_tracks(tracks, output, format)
+        fields = csv_fields.split(",") if csv_fields else None
+        extractor.save_tracks(tracks, output, fields)
     else:
         extractor.print_tracks(tracks, "Your Favorite Tracks")
 
@@ -79,63 +93,78 @@ def playlist():
 
 @playlist.command(name="list")
 @click.option(
-    "--output", "-o", help="Output file (if not specified, prints to console)"
+    "--output", "-o", help="Output CSV file (if not specified, prints to console)"
 )
 @click.option(
-    "--format",
+    "--csv-fields",
     "-f",
-    type=click.Choice(["simple", "detailed", "ids"]),
-    default="simple",
-    help="Output format when saving to file",
+    help="Comma-separated list of fields to include in CSV (default: id,title,artists,album,duration)",
 )
 @click.option(
     "--id", help="Playlist ID (if not specified, you will be prompted to choose)"
 )
-def list_playlist(output, format, id):
+@click.option(
+    "--from-csv",
+    help="Load and display tracks from a CSV file instead of fetching from Tidal",
+)
+def list_playlist(output, csv_fields, id, from_csv):
     """Extract and print tracks from a specific playlist."""
     extractor = TidalExtractor()
 
-    if not extractor.connect():
-        sys.exit(1)
-
-    if id:
-        # Use the provided playlist ID
-        playlist_id = id
-        playlist_name = "Selected Playlist"
-    else:
-        # Let the user choose a playlist
-        playlists = extractor.get_playlists()
-
-        if not playlists:
-            console.print("[yellow]No playlists found.[/yellow]")
-            return
-
-        console.print("[bold]Your Playlists:[/bold]")
-        for i, playlist in enumerate(playlists, 1):
-            console.print(f"{i}. {playlist['name']}")
+    if from_csv:
+        # Load tracks from CSV file
+        from tidal_extractor.formatter import TrackFormatter
 
         try:
-            choice = int(Prompt.ask("Enter playlist number", default="1"))
-            if choice < 1 or choice > len(playlists):
-                console.print("[red]Invalid playlist number.[/red]")
+            tracks = TrackFormatter.load_tracks_from_csv(from_csv)
+            playlist_name = "CSV File"
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[bold red]Error: {str(e)}[/bold red]")
+            sys.exit(1)
+    else:
+        # Fetch tracks from Tidal
+        if not extractor.connect():
+            sys.exit(1)
+
+        if id:
+            # Use the provided playlist ID
+            playlist_id = id
+            playlist_name = "Selected Playlist"
+        else:
+            # Let the user choose a playlist
+            playlists = extractor.get_playlists()
+
+            if not playlists:
+                console.print("[yellow]No playlists found.[/yellow]")
                 return
 
-            selected = playlists[choice - 1]
-            playlist_id = selected["id"]
-            playlist_name = selected["name"]
+            console.print("[bold]Your Playlists:[/bold]")
+            for i, playlist in enumerate(playlists, 1):
+                console.print(f"{i}. {playlist['name']}")
 
-        except ValueError:
-            console.print("[red]Invalid input.[/red]")
-            return
+            try:
+                choice = int(Prompt.ask("Enter playlist number", default="1"))
+                if choice < 1 or choice > len(playlists):
+                    console.print("[red]Invalid playlist number.[/red]")
+                    return
 
-    tracks = extractor.get_playlist_tracks(playlist_id)
+                selected = playlists[choice - 1]
+                playlist_id = selected["id"]
+                playlist_name = selected["name"]
+
+            except ValueError:
+                console.print("[red]Invalid input.[/red]")
+                return
+
+        tracks = extractor.get_playlist_tracks(playlist_id)
 
     if not tracks:
         console.print("[yellow]No tracks found in this playlist.[/yellow]")
         return
 
     if output:
-        extractor.save_tracks(tracks, output, format)
+        fields = csv_fields.split(",") if csv_fields else None
+        extractor.save_tracks(tracks, output, fields)
     else:
         extractor.print_tracks(tracks, f"Tracks in '{playlist_name}'")
 
@@ -216,15 +245,13 @@ def add(playlist_id, track_ids):
 
 
 @cli.command()
-@click.option("--output", "-o", required=True, help="Output file")
+@click.option("--output", "-o", required=True, help="Output CSV file")
 @click.option(
-    "--format",
+    "--csv-fields",
     "-f",
-    type=click.Choice(["simple", "detailed"]),
-    default="simple",
-    help="Output format",
+    help="Comma-separated list of fields to include in CSV (default: id,title,artists,album,duration)",
 )
-def all_playlists(output, format):
+def all_playlists(output, csv_fields):
     """Extract and save tracks from all playlists."""
     extractor = TidalExtractor()
 
@@ -253,7 +280,8 @@ def all_playlists(output, format):
         console.print("[yellow]No tracks found in any playlist.[/yellow]")
         return
 
-    extractor.save_tracks(all_tracks, output, format)
+    fields = csv_fields.split(",") if csv_fields else None
+    extractor.save_tracks(all_tracks, output, fields)
     console.print(
         f"[bold green]Saved {len(all_tracks)} tracks from {len(playlists)} playlists to {output}[/bold green]"
     )
@@ -262,61 +290,87 @@ def all_playlists(output, format):
 @cli.command()
 @click.argument("query")
 @click.option(
-    "--output", "-o", help="Output file (if not specified, prints to console)"
+    "--output", "-o", help="Output CSV file (if not specified, prints to console)"
 )
 @click.option(
-    "--format",
+    "--csv-fields",
     "-f",
-    type=click.Choice(["simple", "detailed"]),
-    default="simple",
-    help="Output format when saving to file",
+    help="Comma-separated list of fields to include in CSV (default: id,title,artists,album,duration)",
 )
-def search(query, output, format):
+@click.option(
+    "--from-csv",
+    help="Search within a CSV file instead of fetching from Tidal",
+)
+def search(query, output, csv_fields, from_csv):
     """Search for tracks in your favorites and playlists."""
     extractor = TidalExtractor()
 
-    if not extractor.connect():
-        sys.exit(1)
+    if from_csv:
+        # Load and search tracks from CSV file
+        from tidal_extractor.formatter import TrackFormatter
 
-    # Search in favorites
-    console.print("Searching in favorites...")
-    favorites = extractor.get_favorite_tracks()
-    favorite_matches = []
+        try:
+            all_tracks = TrackFormatter.load_tracks_from_csv(from_csv)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[bold red]Error: {str(e)}[/bold red]")
+            sys.exit(1)
 
-    for track in favorites:
-        if (
-            query.lower() in track["title"].lower()
-            or any(query.lower() in artist.lower() for artist in track["artists"])
-            or query.lower() in track["album"].lower()
-        ):
-            track["source"] = "Favorites"
-            favorite_matches.append(track)
-
-    # Search in playlists
-    console.print("Searching in playlists...")
-    playlists = extractor.get_playlists()
-    playlist_matches = []
-
-    for playlist in playlists:
-        tracks = extractor.get_playlist_tracks(playlist["id"])
-        for track in tracks:
+        # Search within loaded tracks
+        all_matches = []
+        for track in all_tracks:
             if (
                 query.lower() in track["title"].lower()
                 or any(query.lower() in artist.lower() for artist in track["artists"])
                 or query.lower() in track["album"].lower()
             ):
-                track["source"] = f"Playlist: {playlist['name']}"
-                playlist_matches.append(track)
+                all_matches.append(track)
+    else:
+        # Fetch and search tracks from Tidal
+        if not extractor.connect():
+            sys.exit(1)
 
-    # Combine results
-    all_matches = favorite_matches + playlist_matches
+        # Search in favorites
+        console.print("Searching in favorites...")
+        favorites = extractor.get_favorite_tracks()
+        favorite_matches = []
+
+        for track in favorites:
+            if (
+                query.lower() in track["title"].lower()
+                or any(query.lower() in artist.lower() for artist in track["artists"])
+                or query.lower() in track["album"].lower()
+            ):
+                track["source"] = "Favorites"
+                favorite_matches.append(track)
+
+        # Search in playlists
+        console.print("Searching in playlists...")
+        playlists = extractor.get_playlists()
+        playlist_matches = []
+
+        for playlist in playlists:
+            tracks = extractor.get_playlist_tracks(playlist["id"])
+            for track in tracks:
+                if (
+                    query.lower() in track["title"].lower()
+                    or any(
+                        query.lower() in artist.lower() for artist in track["artists"]
+                    )
+                    or query.lower() in track["album"].lower()
+                ):
+                    track["source"] = f"Playlist: {playlist['name']}"
+                    playlist_matches.append(track)
+
+        # Combine results
+        all_matches = favorite_matches + playlist_matches
 
     if not all_matches:
         console.print(f"[yellow]No tracks found matching '{query}'.[/yellow]")
         return
 
     if output:
-        extractor.save_tracks(all_matches, output, format)
+        fields = csv_fields.split(",") if csv_fields else None
+        extractor.save_tracks(all_matches, output, fields)
     else:
         extractor.print_tracks(all_matches, f"Tracks matching '{query}'")
 
