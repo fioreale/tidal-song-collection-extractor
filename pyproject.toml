@@ -1,9 +1,9 @@
 [project]
 name = "tidal-mgmt-suite"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python CLI tool to manage and export your Tidal music collection"
 authors = [
-    { name = "fioreale", email = "alefio96@gmail.com" }
+    { name = "Alessio Fiorentino", email = "alefio96@gmail.com" }
 ]
 dependencies = [
     "tidalapi>=0.8.3",
@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.1.8",
 ]
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">= 3.8"
 
 [build-system]
@@ -22,3 +23,8 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tidal_extractor"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
