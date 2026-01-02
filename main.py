@@ -1,19 +1,42 @@
 #!/usr/bin/env python3
 """Command-line interface for Tidal Extractor."""
 
+import signal
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import click
+import questionary
+from questionary import Style
 from rich.console import Console
 from rich.progress import Progress
 from rich.prompt import (
     Confirm,  # Add this import
     Prompt,
 )
+from rich.table import Table
 
 from tidal_extractor import TidalExtractor
 
 console = Console()
+
+# Custom style for questionary menus
+custom_style = Style([
+    ('qmark', 'fg:#673ab7 bold'),
+    ('question', 'bold'),
+    ('answer', 'fg:#f44336 bold'),
+    ('pointer', 'fg:#673ab7 bold'),
+    ('highlighted', 'fg:#673ab7 bold'),
+    ('selected', 'fg:#cc5454'),
+    ('separator', 'fg:#cc5454'),
+    ('instruction', ''),
+    ('text', ''),
+])
+
+# Global session state
+session_active = False
+session_extractor = None
 
 
 @click.group()
@@ -459,7 +482,365 @@ def empty_favorites(force):
         )
 
 
+@cli.command()
+def interactive():
+    """Start an interactive session for running multiple commands.
+
+    Authenticate once and run multiple commands without restarting.
+    Use arrow keys to navigate menus. Press Ctrl+C to exit (with confirmation).
+    """
+    global session_active, session_extractor
+
+    # Display welcome message
+    console.print("\n[bold cyan]═══════════════════════════════════════════════════════════[/bold cyan]")
+    console.print("[bold cyan]   Tidal Extractor - Interactive Session Mode[/bold cyan]")
+    console.print("[bold cyan]═══════════════════════════════════════════════════════════[/bold cyan]\n")
+
+    # Authenticate once
+    console.print("[yellow]Authenticating with Tidal...[/yellow]")
+    session_extractor = TidalExtractor()
+
+    if not session_extractor.connect():
+        console.print("[bold red]Authentication failed. Exiting interactive mode.[/bold red]")
+        sys.exit(1)
+
+    console.print("[bold green]✓ Authentication successful![/bold green]")
+    console.print("[dim]Use arrow keys (↑/↓) to navigate, Enter to select[/dim]\n")
+    session_active = True
+
+    # Main interactive loop with menu
+    while session_active:
+        try:
+            action = questionary.select(
+                "What would you like to do?",
+                choices=[
+                    "📋 View Favorites",
+                    "🎵 View Playlists",
+                    "🔍 Search Tracks",
+                    "💾 Export Favorites to CSV",
+                    "📥 Export Playlist to CSV",
+                    "🗑️  Empty Favorites",
+                    "❌ Exit"
+                ],
+                style=custom_style,
+                qmark="🎼"
+            ).ask()
+
+            if not action:  # User pressed Ctrl+C
+                handle_exit_confirmation()
+                continue
+
+            if "Exit" in action:
+                handle_exit_confirmation()
+            elif "View Favorites" in action:
+                view_favorites()
+            elif "View Playlists" in action:
+                view_playlists()
+            elif "Search Tracks" in action:
+                search_tracks()
+            elif "Export Favorites" in action:
+                export_favorites()
+            elif "Export Playlist" in action:
+                export_playlist()
+            elif "Empty Favorites" in action:
+                empty_favorites_interactive()
+
+        except (EOFError, KeyboardInterrupt):
+            handle_exit_confirmation()
+        except Exception as e:
+            console.print(f"[bold red]Error: {str(e)}[/bold red]")
+            console.print("[yellow]Press Enter to continue...[/yellow]")
+            input()
+
+    console.print("\n[yellow]Session ended. Goodbye! 👋[/yellow]")
+
+
+def handle_exit_confirmation():
+    """Handle exit confirmation."""
+    global session_active
+    try:
+        confirm = questionary.confirm(
+            "Are you sure you want to exit?",
+            default=False,
+            style=custom_style
+        ).ask()
+        if confirm:
+            session_active = False
+    except (EOFError, KeyboardInterrupt):
+        console.print("\n[bold red]Exiting immediately...[/bold red]")
+        session_active = False
+
+
+def view_favorites():
+    """View favorite tracks with option to export selection."""
+    tracks = session_extractor.get_favorite_tracks()
+    if not tracks:
+        console.print("[yellow]No favorite tracks found.[/yellow]")
+        return
+
+    session_extractor.print_tracks(tracks, "Your Favorite Tracks")
+    console.print(f"\n[dim]Total: {len(tracks)} tracks[/dim]")
+
+    # Ask if user wants to export
+    export_choice = questionary.confirm(
+        "Would you like to export these tracks to CSV?",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    if export_choice:
+        export_tracks_to_csv(tracks, "favorites")
+
+
+def view_playlists():
+    """View playlists and select one to view tracks."""
+    playlists = session_extractor.get_playlists()
+    if not playlists:
+        console.print("[yellow]No playlists found.[/yellow]")
+        return
+
+    # Create choices for playlist selection
+    playlist_choices = [
+        f"{i+1}. {p['name']} (ID: {p['id']})"
+        for i, p in enumerate(playlists)
+    ]
+    playlist_choices.append("← Back to Main Menu")
+
+    selected = questionary.select(
+        "Select a playlist to view:",
+        choices=playlist_choices,
+        style=custom_style
+    ).ask()
+
+    if not selected or "Back to Main Menu" in selected:
+        return
+
+    # Extract index from selection
+    idx = int(selected.split(".")[0]) - 1
+    playlist = playlists[idx]
+
+    # Get and display tracks
+    tracks = session_extractor.get_playlist_tracks(playlist["id"])
+    if not tracks:
+        console.print(f"[yellow]No tracks found in '{playlist['name']}'.[/yellow]")
+        return
+
+    session_extractor.print_tracks(tracks, f"Playlist: {playlist['name']}")
+    console.print(f"\n[dim]Total: {len(tracks)} tracks[/dim]")
+
+    # Ask if user wants to export
+    export_choice = questionary.confirm(
+        "Would you like to export these tracks to CSV?",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    if export_choice:
+        export_tracks_to_csv(tracks, f"playlist_{playlist['name']}")
+
+
+def search_tracks():
+    """Search for tracks in favorites and playlists."""
+    query = questionary.text(
+        "Enter search query:",
+        style=custom_style
+    ).ask()
+
+    if not query:
+        return
+
+    console.print(f"\n[cyan]Searching for '{query}'...[/cyan]")
+
+    # Search in favorites
+    favorites = session_extractor.get_favorite_tracks()
+    favorite_matches = [
+        {**track, "source": "Favorites"}
+        for track in favorites
+        if query.lower() in track["title"].lower()
+        or any(query.lower() in artist.lower() for artist in track["artists"])
+        or query.lower() in track["album"].lower()
+    ]
+
+    # Search in playlists
+    playlists = session_extractor.get_playlists()
+    playlist_matches = []
+
+    for playlist in playlists:
+        tracks = session_extractor.get_playlist_tracks(playlist["id"])
+        for track in tracks:
+            if (
+                query.lower() in track["title"].lower()
+                or any(query.lower() in artist.lower() for artist in track["artists"])
+                or query.lower() in track["album"].lower()
+            ):
+                track["source"] = f"Playlist: {playlist['name']}"
+                playlist_matches.append(track)
+
+    all_matches = favorite_matches + playlist_matches
+
+    if not all_matches:
+        console.print(f"[yellow]No tracks found matching '{query}'.[/yellow]")
+        return
+
+    session_extractor.print_tracks(all_matches, f"Search results for '{query}'")
+    console.print(f"\n[dim]Total: {len(all_matches)} matches[/dim]")
+
+    # Ask if user wants to export
+    export_choice = questionary.confirm(
+        "Would you like to export these results to CSV?",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    if export_choice:
+        export_tracks_to_csv(all_matches, f"search_{query}")
+
+
+def export_favorites():
+    """Export all favorites to CSV."""
+    tracks = session_extractor.get_favorite_tracks()
+    if not tracks:
+        console.print("[yellow]No favorite tracks to export.[/yellow]")
+        return
+
+    export_tracks_to_csv(tracks, "favorites")
+
+
+def export_playlist():
+    """Export a selected playlist to CSV."""
+    playlists = session_extractor.get_playlists()
+    if not playlists:
+        console.print("[yellow]No playlists found.[/yellow]")
+        return
+
+    # Create choices for playlist selection
+    playlist_choices = [
+        f"{i+1}. {p['name']}"
+        for i, p in enumerate(playlists)
+    ]
+    playlist_choices.append("← Cancel")
+
+    selected = questionary.select(
+        "Select a playlist to export:",
+        choices=playlist_choices,
+        style=custom_style
+    ).ask()
+
+    if not selected or "Cancel" in selected:
+        return
+
+    # Extract index from selection
+    idx = int(selected.split(".")[0]) - 1
+    playlist = playlists[idx]
+
+    # Get tracks
+    tracks = session_extractor.get_playlist_tracks(playlist["id"])
+    if not tracks:
+        console.print(f"[yellow]No tracks found in '{playlist['name']}'.[/yellow]")
+        return
+
+    export_tracks_to_csv(tracks, f"playlist_{playlist['name']}")
+
+
+def export_tracks_to_csv(tracks, default_name):
+    """Export tracks to CSV file with user-specified filename."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_filename = f"{default_name}_{timestamp}.csv"
+
+    filename = questionary.text(
+        "Enter filename for export:",
+        default=default_filename,
+        style=custom_style
+    ).ask()
+
+    if not filename:
+        console.print("[yellow]Export cancelled.[/yellow]")
+        return
+
+    # Ensure .csv extension
+    if not filename.endswith('.csv'):
+        filename += '.csv'
+
+    try:
+        session_extractor.save_tracks(tracks, filename)
+        console.print(f"[bold green]✓ Successfully exported {len(tracks)} tracks to '{filename}'[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Error exporting tracks: {str(e)}[/bold red]")
+
+
+def empty_favorites_interactive():
+    """Empty favorites with confirmation."""
+    tracks = session_extractor.get_favorite_tracks()
+    count = len(tracks)
+
+    if count == 0:
+        console.print("[yellow]Your favorites collection is already empty.[/yellow]")
+        return
+
+    console.print("\n[bold red]⚠️  WARNING: DESTRUCTIVE OPERATION  ⚠️[/bold red]")
+    console.print(f"You are about to remove all {count} tracks from your favorites collection.")
+    console.print("[bold red]This action cannot be undone![/bold red]\n")
+
+    confirm = questionary.confirm(
+        "Are you absolutely sure you want to remove all your favorites?",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    if not confirm:
+        console.print("[yellow]Operation cancelled.[/yellow]")
+        return
+
+    with Progress() as progress:
+        task = progress.add_task("[red]Emptying favorites...", total=None)
+        success = session_extractor.empty_favorites()
+        progress.update(task, completed=True)
+
+    if success:
+        console.print(f"[bold green]Successfully removed all {count} tracks.[/bold green]")
+    else:
+        console.print("[bold red]Failed to completely empty favorites.[/bold red]")
+
+
+# Global flag to track exit intent
+exit_requested = False
+
+
+def signal_handler(sig, frame):
+    """Handle Ctrl+C signal with confirmation."""
+    global exit_requested, session_active
+
+    # If in interactive mode, let the interactive loop handle it
+    if session_active:
+        raise KeyboardInterrupt()
+
+    if exit_requested:
+        # User pressed Ctrl+C twice, force exit
+        console.print("\n[bold red]Exiting immediately...[/bold red]")
+        sys.exit(0)
+
+    try:
+        console.print()  # New line for better formatting
+        confirm = Confirm.ask(
+            "[bold yellow]Are you sure you want to exit?[/bold yellow]",
+            default=False
+        )
+        if confirm:
+            console.print("[yellow]Exiting...[/yellow]")
+            sys.exit(0)
+        else:
+            console.print("[green]Continuing...[/green]")
+            exit_requested = False
+    except (KeyboardInterrupt, EOFError):
+        # If user presses Ctrl+C during confirmation, mark for immediate exit next time
+        exit_requested = True
+        console.print("\n[yellow]Press Ctrl+C again to exit immediately.[/yellow]")
+
+
 if __name__ == "__main__":
+    # Register signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+
     try:
         cli()
     except KeyboardInterrupt:

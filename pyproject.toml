@@ -9,6 +9,7 @@ dependencies = [
     "tidalapi>=0.8.3",
     "rich>=14.0.0",
     "click>=8.1.8",
+    "questionary>=2.0.0",
 ]
 readme = "README.md"
 license = { text = "MIT" }
