@@ -107,3 +107,38 @@ class TidalExtractor:
                 return False
 
         return self.collector.remove_all_favorite_tracks()
+
+    def clear_playlist(self, playlist_id: str) -> bool:
+        """Remove all tracks from a user-owned playlist.
+
+        Note: This only works for playlists owned by the authenticated user.
+
+        Args:
+            playlist_id: ID of the playlist to clear
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.collector:
+            if not self.connect():
+                return False
+
+        return self.collector.clear_playlist(playlist_id)
+
+    def reorder_playlist(self, playlist_id: str, track_ids: List[str]) -> bool:
+        """Reorder all tracks in a user-owned playlist based on the provided track IDs.
+
+        Note: This only works for playlists owned by the authenticated user.
+
+        Args:
+            playlist_id: ID of the playlist to reorder
+            track_ids: List of track IDs in the desired order
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.collector:
+            if not self.connect():
+                return False
+
+        return self.collector.reorder_playlist(playlist_id, track_ids)

@@ -519,6 +519,8 @@ def interactive():
                     "🔍 Search Tracks",
                     "💾 Export Favorites to CSV",
                     "📥 Export Playlist to CSV",
+                    "📂 Import CSV to Create Playlist",
+                    "🔄 Reorder Playlist from CSV",
                     "🗑️  Empty Favorites",
                     "❌ Exit"
                 ],
@@ -542,6 +544,10 @@ def interactive():
                 export_favorites()
             elif "Export Playlist" in action:
                 export_playlist()
+            elif "Import CSV to Create Playlist" in action:
+                import_csv_to_playlist()
+            elif "Reorder Playlist" in action:
+                reorder_playlist_from_csv()
             elif "Empty Favorites" in action:
                 empty_favorites_interactive()
 
@@ -766,6 +772,163 @@ def export_tracks_to_csv(tracks, default_name):
         console.print(f"[bold green]✓ Successfully exported {len(tracks)} tracks to '{filename}'[/bold green]")
     except Exception as e:
         console.print(f"[bold red]Error exporting tracks: {str(e)}[/bold red]")
+
+
+def import_csv_to_playlist():
+    """Import tracks from CSV file and create a new playlist."""
+    csv_file = questionary.text(
+        "Enter CSV file path:",
+        style=custom_style
+    ).ask()
+
+    if not csv_file:
+        console.print("[yellow]Import cancelled.[/yellow]")
+        return
+
+    # Load tracks from CSV
+    try:
+        from tidal_extractor.formatter import TrackFormatter
+        tracks = TrackFormatter.load_tracks_from_csv(csv_file)
+    except FileNotFoundError:
+        console.print(f"[bold red]Error: CSV file '{csv_file}' not found[/bold red]")
+        return
+    except ValueError as e:
+        console.print(f"[bold red]Error: Invalid CSV file - {str(e)}[/bold red]")
+        return
+
+    if not tracks:
+        console.print("[yellow]No tracks found in CSV file.[/yellow]")
+        return
+
+    # Get playlist details from user
+    playlist_name = questionary.text(
+        "Enter new playlist name:",
+        style=custom_style
+    ).ask()
+
+    if not playlist_name:
+        console.print("[yellow]Playlist creation cancelled.[/yellow]")
+        return
+
+    playlist_description = questionary.text(
+        "Enter playlist description (optional):",
+        default="",
+        style=custom_style
+    ).ask()
+
+    # Create playlist
+    console.print(f"\n[cyan]Creating playlist '{playlist_name}'...[/cyan]")
+    playlist = session_extractor.collector.create_playlist(playlist_name, playlist_description)
+
+    if not playlist:
+        console.print("[bold red]Failed to create playlist[/bold red]")
+        return
+
+    # Add tracks to playlist
+    track_ids = [str(track["id"]) for track in tracks]
+    console.print(f"[cyan]Adding {len(track_ids)} tracks to playlist...[/cyan]")
+    success = session_extractor.collector.add_tracks_to_playlist(playlist["id"], track_ids)
+
+    if success:
+        console.print(
+            f"[bold green]✓ Successfully created playlist '{playlist_name}' with {len(track_ids)} tracks[/bold green]"
+        )
+    else:
+        console.print(
+            f"[bold red]Partially failed to add all tracks. Some tracks may not have been added.[/bold red]"
+        )
+
+
+def reorder_playlist_from_csv():
+    """Reorder an existing playlist based on track order from a CSV file.
+
+    This function clears a user-owned playlist and re-adds tracks in the order
+    specified in the CSV file. Only works for playlists owned by the authenticated user.
+    """
+    # Get list of playlists
+    playlists = session_extractor.get_playlists()
+    if not playlists:
+        console.print("[yellow]No playlists found.[/yellow]")
+        return
+
+    # Let user select a playlist
+    playlist_choices = [
+        f"{i+1}. {p['name']} (ID: {p['id']})"
+        for i, p in enumerate(playlists)
+    ]
+    playlist_choices.append("← Cancel")
+
+    selected = questionary.select(
+        "Select a playlist to reorder:",
+        choices=playlist_choices,
+        style=custom_style
+    ).ask()
+
+    if not selected or "Cancel" in selected:
+        return
+
+    # Extract index from selection
+    idx = int(selected.split(".")[0]) - 1
+    playlist = playlists[idx]
+
+    # Get CSV file path
+    csv_file = questionary.text(
+        "Enter CSV file path:",
+        style=custom_style
+    ).ask()
+
+    if not csv_file:
+        console.print("[yellow]Reorder cancelled.[/yellow]")
+        return
+
+    # Load tracks from CSV
+    try:
+        from tidal_extractor.formatter import TrackFormatter
+        csv_tracks = TrackFormatter.load_tracks_from_csv(csv_file)
+    except FileNotFoundError:
+        console.print(f"[bold red]Error: CSV file '{csv_file}' not found[/bold red]")
+        return
+    except ValueError as e:
+        console.print(f"[bold red]Error: Invalid CSV file - {str(e)}[/bold red]")
+        return
+
+    if not csv_tracks:
+        console.print("[yellow]No tracks found in CSV file.[/yellow]")
+        return
+
+    # Show warning about destructive operation
+    current_tracks = session_extractor.get_playlist_tracks(playlist["id"])
+    console.print("\n[bold red]⚠️  WARNING: DESTRUCTIVE OPERATION  ⚠️[/bold red]")
+    console.print(
+        f"You are about to reorder '{playlist['name']}' with {len(current_tracks)} track(s)."
+    )
+    console.print(f"The new order will have {len(csv_tracks)} track(s) from the CSV.")
+    console.print("[bold red]This action will clear and rebuild the playlist![/bold red]\n")
+
+    # Confirm with user
+    confirm = questionary.confirm(
+        "Are you absolutely sure you want to proceed?",
+        default=False,
+        style=custom_style
+    ).ask()
+
+    if not confirm:
+        console.print("[yellow]Reorder cancelled.[/yellow]")
+        return
+
+    # Perform reorder
+    track_ids = [str(track["id"]) for track in csv_tracks]
+    console.print(f"\n[cyan]Reordering playlist with {len(track_ids)} tracks...[/cyan]")
+    success = session_extractor.reorder_playlist(playlist["id"], track_ids)
+
+    if success:
+        console.print(
+            f"[bold green]✓ Successfully reordered playlist '{playlist['name']}' with {len(track_ids)} tracks[/bold green]"
+        )
+    else:
+        console.print(
+            f"[bold red]Failed to reorder playlist. The playlist may be in an inconsistent state.[/bold red]"
+        )
 
 
 def empty_favorites_interactive():
