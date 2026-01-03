@@ -1,5 +1,9 @@
 """Authentication module for Tidal API."""
 
+import platform
+import subprocess
+import webbrowser
+
 import tidalapi
 from rich.console import Console
 from rich.panel import Panel
@@ -28,7 +32,44 @@ def authenticate(silent=False):
             console.print(
                 f"Please visit: [bold blue]{login.verification_uri_complete}[/bold blue]"
             )
+
+            # Try to open browser automatically
+            try:
+                console.print("Opening login page in browser...")
+
+                # Ensure URL has proper protocol
+                url = login.verification_uri_complete
+                if not url.startswith(('http://', 'https://')):
+                    url = f"https://{url}"
+
+                # On macOS, use the 'open' command directly for better reliability
+                if platform.system() == "Darwin":
+                    subprocess.run(["open", url], check=False)
+                else:
+                    # On other platforms, use webbrowser
+                    opened = webbrowser.open_new_tab(url)
+                    if not opened:
+                        console.print("[yellow]Could not automatically open browser. Please open the URL manually.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Could not open browser: {e}[/yellow]")
+                console.print("[yellow]Please open the URL manually.[/yellow]")
+
             console.print("Waiting for authorization...")
+
+        else:
+            # Even in silent mode, try to open the browser
+            try:
+                # Ensure URL has proper protocol
+                url = login.verification_uri_complete
+                if not url.startswith(('http://', 'https://')):
+                    url = f"https://{url}"
+
+                if platform.system() == "Darwin":
+                    subprocess.run(["open", url], check=False)
+                else:
+                    webbrowser.open_new_tab(url)
+            except:
+                pass
 
         future.result()  # Wait for the user to authorize
 
