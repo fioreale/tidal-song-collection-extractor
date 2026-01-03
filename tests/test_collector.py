@@ -332,36 +332,40 @@ class TestTidalCollector(unittest.TestCase):
 
     def test_get_playlist_by_id_success(self):
         """Test getting a playlist by ID successfully."""
-        mock_playlists = [
-            MockPlaylist("pl1", "Playlist 1", "Description 1"),
-            MockPlaylist("pl2", "Playlist 2", "Description 2"),
-        ]
+        mock_playlist = MockPlaylist("pl2", "Playlist 2", "Description 2")
+        mock_user_playlist = MockPlaylist("pl2", "Playlist 2", "Description 2")
 
-        self.mock_user.playlists.return_value = mock_playlists
+        # Mock the session.playlist() call
+        mock_playlist_obj = MagicMock()
+        mock_playlist_obj.factory.return_value = mock_user_playlist
+        self.mock_session.playlist.return_value = mock_playlist_obj
 
         result = self.collector.get_playlist_by_id("pl2")
 
         self.assertIsNotNone(result)
         self.assertEqual(result.id, "pl2")
         self.assertEqual(result.name, "Playlist 2")
+        self.mock_session.playlist.assert_called_once_with("pl2")
 
     def test_get_playlist_by_id_not_found(self):
         """Test getting a playlist by ID when it doesn't exist."""
-        mock_playlists = [MockPlaylist("pl1", "Playlist 1", "Description 1")]
-
-        self.mock_user.playlists.return_value = mock_playlists
+        # Mock session.playlist() to raise an exception when playlist not found
+        self.mock_session.playlist.side_effect = Exception("Playlist not found")
 
         result = self.collector.get_playlist_by_id("pl999")
 
         self.assertIsNone(result)
+        self.mock_session.playlist.assert_called_once_with("pl999")
 
     def test_get_playlist_by_id_exception(self):
         """Test getting a playlist by ID when an exception occurs."""
-        self.mock_user.playlists.side_effect = Exception("API error")
+        # Mock session.playlist() to raise an exception
+        self.mock_session.playlist.side_effect = Exception("API error")
 
         result = self.collector.get_playlist_by_id("pl1")
 
         self.assertIsNone(result)
+        self.mock_session.playlist.assert_called_once_with("pl1")
 
     def test_create_playlist_success(self):
         """Test creating a playlist successfully."""
