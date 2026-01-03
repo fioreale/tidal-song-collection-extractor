@@ -1,28 +1,58 @@
 [project]
 name = "tidal-mgmt-suite"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python CLI tool to manage and export your Tidal music collection"
 authors = [
-    { name = "fioreale", email = "alefio96@gmail.com" }
+    { name = "Alessio Fiorentino", email = "alefio96@gmail.com" }
 ]
 dependencies = [
-    "tidalapi>=0.8.3",
-    "rich>=14.0.0",
-    "click>=8.1.8",
+    "tidalapi>=0.8.10",
+    "rich>=14.2.0",
+    "click>=8.3.1",
+    "questionary>=2.1.1",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+license = { text = "MIT" }
+requires-python = ">= 3.10"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
-dev-dependencies = []
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tidal_extractor"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=5.0.0",
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=src/tidal_extractor",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "-v"
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/tidal_extractor"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"

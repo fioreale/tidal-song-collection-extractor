@@ -1,423 +1,154 @@
-# Tidal Song Collection Extractor
+# Tidal Management Suite
 
-A Python tool to extract and print song lists from your Tidal collection. This project is structured as a Rye project for modern Python development.
+A Python CLI tool to manage and export your Tidal music collection with support for favorites, playlists, and CSV exports.
 
 ## Installation
 
-### Using Rye
-
-This project uses [Rye](https://rye-up.com/) for dependency management and packaging.
+This project uses [uv](https://github.com/astral-sh/uv) for fast dependency management.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/tidal-extractor.git
-cd tidal-extractor
+git clone https://github.com/fioreale/tidal-song-collection-extractor.git
+cd tidal-song-collection-extractor
 
-# Install with Rye
-rye sync
-```
+# Install with uv
+uv sync
 
-### Manual Installation
-
-If you don't have Rye installed:
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install the package in development mode
+# Or using pip
 pip install -e .
 ```
 
-## Command-Line Usage
+## Quick Start
 
-The `tidal-extractor` command provides various subcommands to interact with your Tidal collection.
-
-### Authentication
-
-All commands will automatically handle authentication with Tidal. You'll be prompted to visit a URL to authorize the application.
-
-### Basic Commands
-
-#### Print your favorite tracks
+All commands require Tidal authentication on first use. Run the entry point:
 
 ```bash
-tidal-extractor favorites
+python main.py [COMMAND]
 ```
 
-#### Print all favorite tracks in a simple list format
+### Core Commands
+
+**Favorites**
+```bash
+python main.py favorites                           # Display favorites
+python main.py favorites -o tracks.csv             # Export to CSV
+python main.py favorites --from-csv tracks.csv     # Load from CSV
+python main.py empty-favorites                     # Clear all favorites (destructive!)
+```
+
+**Playlists**
+```bash
+python main.py playlists                           # List all playlists
+python main.py playlist list                       # Select and display playlist
+python main.py playlist list --id PLAYLIST_ID      # Display specific playlist
+python main.py playlist create "Name" -t TRACK_ID  # Create with tracks
+python main.py playlist add PLAYLIST_ID TRACK_ID   # Add tracks to playlist
+python main.py all-playlists -o all.csv            # Export all playlists
+```
+
+**Search**
+```bash
+python main.py search "query"                      # Search favorites & playlists
+python main.py search "query" --from-csv file.csv  # Search within CSV
+```
+
+### CSV Export Options
+
+Control CSV output with field selection:
 
 ```bash
-tidal-extractor print-all
+python main.py favorites -o tracks.csv -f "id,title,artists"
+python main.py favorites -o tracks.csv -f "title,album,duration"
 ```
 
-#### List your playlists
+Available fields: `id`, `title`, `artists`, `album`, `duration`, `playlist`, `source`
 
-```bash
-tidal-extractor playlists
-```
-
-#### Print tracks from a specific playlist
-
-```bash
-tidal-extractor playlist
-```
-
-You'll be prompted to select a playlist from your collection.
-
-### Playlist Management
-
-#### List tracks in a playlist
-```bash
-tidal-extractor playlist list
-```
-
-#### Create a new playlist
-```bash
-# Create an empty playlist
-tidal-extractor playlist create "My New Playlist" --description "Optional description"
-
-# Create and add specific tracks
-tidal-extractor playlist create "My Playlist" -t track_id1 -t track_id2
-
-# Create and add tracks from search
-tidal-extractor playlist create "Rock Mix" -s "metallica" -s "iron maiden"
-
-# Combine direct tracks and search
-tidal-extractor playlist create "Mixed Playlist" -t track_id1 -s "search query"
-```
-
-#### Add tracks to an existing playlist
-```bash
-# Add specific tracks
-tidal-extractor playlist add playlist_id track_id1 track_id2 track_id3
-
-# Example
-tidal-extractor playlist add 12345678 87654321 98765432
-```
-
-### Output Options
-
-Most commands support saving the output to a file and different output formats:
-
-#### Save your favorite tracks to a file
-
-```bash
-tidal-extractor favorites --output favorites.txt
-```
-
-#### Save with specific format
-
-```bash
-tidal-extractor favorites --output favorites.txt --format detailed
-```
-
-The `--format` option accepts:
-- `simple` (default): Displays a table with track information including IDs
-- `detailed`: Multiple lines per track with all available metadata
-- `ids`: Only track IDs, one per line
-
-### Output Formats
-
-#### Simple Format (default)
-```bash
-tidal-extractor favorites
-```
-This will display a table with all track information including IDs.
-
-#### Detailed Format
-```bash
-tidal-extractor favorites --output tracks.txt --format detailed
-```
-This will save a detailed text file with all track information.
-
-#### IDs Only Format
-```bash
-tidal-extractor favorites --output track_ids.txt --format ids
-```
-This will save a file containing only the track IDs, one per line.
-
-### Advanced Commands
-
-#### Save tracks from a specific playlist using its ID
-
-```bash
-tidal-extractor playlist --id YOUR_PLAYLIST_ID --output playlist_tracks.txt
-```
-
-#### Save tracks from all playlists
-
-```bash
-tidal-extractor all-playlists --output all_playlists.txt
-```
-
-#### Search for tracks across your collection
-
-```bash
-tidal-extractor search "query string"
-```
-
-This searches your favorites and all playlists for tracks matching the query in title, artist, or album.
-
-#### Save search results to a file
-
-```bash
-tidal-extractor search "query string" --output search_results.txt
-```
-
-### Global Options
-
-These options can be used with any command:
-
-```bash
-# Show help information
-tidal-extractor --help
-
-# Show help for a specific command
-tidal-extractor favorites --help
-
-# Show version information
-tidal-extractor --version
-```
-
-## Using as a Python Module
-
-You can also use the package programmatically in your Python code:
+## Programmatic Usage
 
 ```python
 from tidal_extractor import TidalExtractor
 
-# Create an extractor instance
 extractor = TidalExtractor()
-
-# Connect to Tidal (this will prompt for authentication)
 if extractor.connect():
-    # Get favorite tracks
     tracks = extractor.get_favorite_tracks()
-    
-    # Print tracks to console
-    extractor.print_tracks(tracks, "My Favorite Tracks")
-    
-    # Save tracks to a file
-    extractor.save_tracks(tracks, "favorites.txt", "simple")
-    
-    # Get playlists
-    playlists = extractor.get_playlists()
-    
-    # Get tracks from a specific playlist
-    if playlists:
-        playlist_id = playlists[0]['id']
-        playlist_tracks = extractor.get_playlist_tracks(playlist_id)
-        
-        # Print playlist tracks
-        extractor.print_tracks(playlist_tracks, f"Tracks in '{playlists[0]['name']}'")
+    extractor.save_tracks(tracks, "favorites.csv", fields=["id", "title", "artists"])
 ```
 
-### Silent Mode
-
-For programmatic usage, you can enable silent mode to suppress console output:
-
-```python
-extractor = TidalExtractor(silent=True)
-```
-
-### Track Data Structure
-
-Each track is represented as a dictionary with the following fields:
-
+**Track structure:**
 ```python
 {
-    'id': 'track_id',
-    'title': 'Track Title',
-    'artists': ['Artist 1', 'Artist 2'],
-    'album': 'Album Name',
-    'duration': 180  # in seconds
+    'id': str,
+    'title': str,
+    'artists': list[str],
+    'album': str,
+    'duration': int  # seconds
 }
 ```
 
-## Rye Project Structure
-
-This project follows the Rye project structure:
+## Project Structure
 
 ```
-tidal-extractor/
-├── pyproject.toml        # Project metadata and dependencies
-├── README.md             # This file
-├── src/
-│   └── tidal_extractor/  # Source code
-│       ├── __init__.py
-│       ├── auth.py
-│       ├── collector.py
-│       ├── formatter.py
-│       └── core.py
-├── tests/                # Test files
-└── main.py               # CLI entry point
+tidal-song-collection-extractor/
+├── main.py                  # CLI entry point
+├── pyproject.toml           # Dependencies & config
+├── uv.lock                  # Lock file
+├── src/tidal_extractor/     # Core package
+│   ├── __init__.py
+│   ├── auth.py              # Tidal authentication
+│   ├── cli.py               # CLI utilities
+│   ├── collector.py         # Data collection
+│   ├── core.py              # Main extractor logic
+│   └── formatter.py         # CSV/output formatting
+└── tests/
+    ├── __init__.py
+    └── test_formatter_csv.py
 ```
 
 ## Development
 
-### Running Tests
-
+**Setup**
 ```bash
-rye test
+uv sync --dev
 ```
 
-### Building the Package
-
+**Run tests**
 ```bash
-rye build
+uv run pytest
 ```
 
-### Updating Dependencies
-
+**Add dependencies**
 ```bash
-rye add package-name
-rye sync
+uv add package-name
+uv sync
 ```
 
-## Configuration for Rye
+## Contributing
 
-The `pyproject.toml` file contains all the configuration for the project:
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Write tests for new functionality
+4. Ensure all tests pass: `uv run pytest`
+5. Format code consistently with existing style
+6. Submit a pull request to `master`
 
-```toml
-[project]
-name = "tidal-extractor"
-version = "0.1.0"
-description = "A tool to extract and print song lists from Tidal"
-authors = [
-    {name = "Your Name", email = "your.email@example.com"},
-]
-dependencies = [
-    "tidalapi>=0.7.0",
-    "rich>=12.0.0",
-    "click>=8.0.0",
-]
-requires-python = ">=3.7"
-readme = "README.md"
-license = {text = "MIT"}
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
-dev-dependencies = [
-    "pytest>=7.0.0",
-]
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/tidal_extractor"]
-```
-
-## Examples
-
-### Example 1: Export favorite tracks in different formats
-
-```python
-from tidal_extractor import TidalExtractor
-
-extractor = TidalExtractor()
-if extractor.connect():
-    # Get favorite tracks
-    tracks = extractor.get_favorite_tracks()
-    
-    # Save in simple format (default)
-    extractor.save_tracks(tracks, "favorites_simple.txt")
-    
-    # Save in detailed format
-    extractor.save_tracks(tracks, "favorites_detailed.txt", format="detailed")
-    
-    # Save only track IDs
-    extractor.save_tracks(tracks, "favorite_ids.txt", format="ids")
-```
-
-### Example 2: Export all favorite tracks to a CSV file
-
-```python
-from tidal_extractor import TidalExtractor
-import csv
-
-extractor = TidalExtractor()
-if extractor.connect():
-    tracks = extractor.get_favorite_tracks()
-    
-    with open('favorites.csv', 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Title', 'Artists', 'Album', 'Duration'])
-        
-        for track in tracks:
-            writer.writerow([
-                track['title'],
-                ', '.join(track['artists']),
-                track['album'],
-                track['duration']
-            ])
-    
-    print(f"Exported {len(tracks)} tracks to favorites.csv")
-```
-
-### Example 3: Find duplicate tracks across playlists
-
-```python
-from tidal_extractor import TidalExtractor
-from collections import defaultdict
-
-extractor = TidalExtractor()
-if extractor.connect():
-    playlists = extractor.get_playlists()
-    
-    track_occurrences = defaultdict(list)
-    
-    for playlist in playlists:
-        tracks = extractor.get_playlist_tracks(playlist['id'])
-        for track in tracks:
-            key = (track['title'], ', '.join(track['artists']))
-            track_occurrences[key].append(playlist['name'])
-    
-    duplicates = {k: v for k, v in track_occurrences.items() if len(v) > 1}
-    
-    print(f"Found {len(duplicates)} duplicate tracks across playlists:")
-    for (title, artists), playlists in duplicates.items():
-        print(f"'{title}' by {artists} appears in: {', '.join(playlists)}")
-```
-
-## Troubleshooting
-
-### Authentication Issues
-
-If you encounter authentication issues:
-
-1. Ensure you have an active Tidal subscription
-2. Try clearing your browser cookies and cache
-3. Check your internet connection
-
-### Rate Limiting
-
-Tidal may rate-limit API requests. If you encounter errors:
-
-1. Add delays between requests
-2. Reduce the number of concurrent requests
-3. Try again later
-
-### Missing Tracks
-
-Some tracks might not be available through the API due to:
-
-1. Regional restrictions
-2. Licensing issues
-3. API limitations
+**Code Guidelines:**
+- Python 3.8+
+- Use type hints where applicable
+- Keep functions focused and testable
+- Add docstrings for public APIs
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## Dependencies
 
-- [tidalapi](https://github.com/tamland/python-tidal) - Python client for the Tidal API
-- [Rye](https://rye-up.com/) - Python packaging tool
-- [Click](https://click.palletsprojects.com/) - Command-line interface creation kit
-- [Rich](https://rich.readthedocs.io/) - Terminal formatting library
+- [tidalapi](https://github.com/tamland/python-tidal) - Tidal API client
+- [click](https://click.palletsprojects.com/) - CLI framework
+- [rich](https://rich.readthedocs.io/) - Terminal formatting
+- [uv](https://github.com/astral-sh/uv) - Package management
+
+---
+
+**Maintainer:** [@fioreale](https://github.com/fioreale)
+**Issues:** [GitHub Issues](https://github.com/fioreale/tidal-song-collection-extractor/issues)

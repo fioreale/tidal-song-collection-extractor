@@ -101,7 +101,8 @@ class TidalCollector:
             List of track dictionaries
         """
         if self.silent:
-            tracks = self.session.get_playlist_tracks(playlist_id)
+            playlist = self.session.playlist(playlist_id)
+            tracks = playlist.tracks()
 
             result = []
             for track in tracks:
@@ -121,7 +122,8 @@ class TidalCollector:
             return result
         else:
             with Progress() as progress:
-                tracks = self.session.get_playlist_tracks(playlist_id)
+                playlist = self.session.playlist(playlist_id)
+                tracks = playlist.tracks()
 
                 task = progress.add_task(
                     "[cyan]Fetching playlist tracks...", total=len(tracks)
@@ -227,20 +229,15 @@ class TidalCollector:
             playlist_id: ID of the playlist
 
         Returns:
-            Playlist object or None if not found
+            Playlist or UserPlaylist object (if owned by user) or None if not found
         """
         try:
-            # Try to find the playlist in the user's playlists
-            playlists = self.user.playlists()
-            for playlist in playlists:
-                if playlist.id == playlist_id:
-                    return playlist
+            # Get the playlist using session.playlist() which returns a Playlist object
+            playlist = self.session.playlist(playlist_id)
 
-            if not self.silent:
-                console.print(
-                    f"[yellow]Could not find playlist with ID {playlist_id}[/yellow]"
-                )
-            return None
+            # Use the factory method to convert to UserPlaylist if it's owned by the user
+            # This is necessary to access deletion methods like clear(), remove_by_id(), etc.
+            return playlist.factory()
 
         except Exception as e:
             if not self.silent:
@@ -376,4 +373,105 @@ class TidalCollector:
         except Exception as e:
             if not self.silent:
                 console.print(f"[red]Failed to remove favorite tracks: {str(e)}[/red]")
+            return False
+
+    def clear_playlist(self, playlist_id: str) -> bool:
+        """Remove all tracks from a user-owned playlist.
+
+        This method uses the tidalapi UserPlaylist.clear() method to remove all tracks.
+        Note: This only works for playlists owned by the authenticated user.
+
+        Args:
+            playlist_id: ID of the playlist to clear
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            playlist = self.get_playlist_by_id(playlist_id)
+
+            if not playlist:
+                if not self.silent:
+                    console.print(
+                        f"[yellow]Playlist with ID {playlist_id} not found[/yellow]"
+                    )
+                return False
+
+            # Check if this is a UserPlaylist (user-owned playlist)
+            # Only UserPlaylist objects have the clear() method
+            if not hasattr(playlist, 'clear'):
+                if not self.silent:
+                    console.print(
+                        "[yellow]Cannot clear this playlist. You can only clear playlists that you own.[/yellow]"
+                    )
+                return False
+
+            # Get current track count
+            num_tracks = playlist.num_tracks
+
+            if num_tracks == 0:
+                if not self.silent:
+                    console.print("[yellow]Playlist is already empty[/yellow]")
+                return True
+
+            if not self.silent:
+                console.print(f"Clearing {num_tracks} tracks from playlist...")
+
+            # Use the UserPlaylist.clear() method
+            success = playlist.clear()
+
+            if success and not self.silent:
+                console.print(
+                    f"[bold green]Successfully cleared all {num_tracks} tracks from playlist[/bold green]"
+                )
+
+            return success
+
+        except Exception as e:
+            if not self.silent:
+                console.print(f"[red]Failed to clear playlist: {str(e)}[/red]")
+            return False
+
+    def reorder_playlist(self, playlist_id: str, track_ids: List[str]) -> bool:
+        """Reorder all tracks in a user-owned playlist based on the provided track IDs.
+
+        This method clears the playlist and re-adds tracks in the specified order.
+        Note: This only works for playlists owned by the authenticated user.
+
+        Args:
+            playlist_id: ID of the playlist to reorder
+            track_ids: List of track IDs in the desired order
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # First, clear the playlist
+            if not self.clear_playlist(playlist_id):
+                if not self.silent:
+                    console.print("[yellow]Failed to clear playlist before reordering[/yellow]")
+                return False
+
+            # Convert to list if not already
+            if not isinstance(track_ids, list):
+                track_ids = list(track_ids)
+
+            if not track_ids:
+                if not self.silent:
+                    console.print("[yellow]No tracks to add to playlist[/yellow]")
+                return True
+
+            # Add tracks back in the specified order
+            success = self.add_tracks_to_playlist(playlist_id, track_ids)
+
+            if success and not self.silent:
+                console.print(
+                    f"[bold green]Successfully reordered playlist with {len(track_ids)} tracks[/bold green]"
+                )
+
+            return success
+
+        except Exception as e:
+            if not self.silent:
+                console.print(f"[red]Failed to reorder playlist: {str(e)}[/red]")
             return False
